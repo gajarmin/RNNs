@@ -34,10 +34,14 @@ class RNN(object):
 		self.loss = lambda y: -T.mean(T.nnet.categorical_crossentropy(self.prob, y))
 
 class RNN_Wrapper(object):
-	def __init__(self, data_input_file, learning_rate=0.01):
+	def __init__(self, data_input_file, learning_rate=0.01, sequence_len=50):
+		#hyper-parameters
+		self.learning_rate = learning_rate
+		self.sequence_len = sequence_len
+
 		self.__read_data(data_input_file)		
 
-		self.learning_rate = learning_rate
+
 
 		self.y = T.imatrix()
 		self.x = T.matrix()
@@ -56,14 +60,30 @@ class RNN_Wrapper(object):
 
 		self.get_cost = theano.function(inputs=[self.x, self.y],
 										outputs=self.cost,
-										updates=self.updates)
+										updates=self.updates,
+										allow_input_downcast=True)
+
+
 
 	def __read_data(self, data_input_file):
-		self.create_vocab_mappings(data_input_file)
-		#f = open(data_input_file, 'r')
+		self.__create_vocab_mappings(data_input_file)
+		with open(data_input_file, 'r') as f:
+
+			self.seqs = np.rollaxis(np.dstack([self.seq_2_mat(seq) for seq in iter(lambda: f.read(self.sequence_len), '')][0:-1]), 2)
+			self.next_step = np.zeros(self.seqs.shape)
+			for i, matrix in enumerate(self.seqs):
+				self.next_step[i, 0:-1, :] = self.seqs[i, 1:, :]
+				try:
+					self.next_step[i, -1, :] = self.seqs[i+1, 0, :]
+				except IndexError:
+					#Except the index out of bounds error that gets caused on the last iteration and just break from the loop
+					break
+			self.next_step[-1, -1, :] = self.one_hot("")
 
 
-	def create_vocab_mappings(self, data_input_file):
+
+
+	def __create_vocab_mappings(self, data_input_file):
 	    #create mapping from char -> int
 	    vocab_mapping = {}
 	    i = 0
@@ -76,12 +96,18 @@ class RNN_Wrapper(object):
 	                if char not in vocab_mapping:
 	                    vocab_mapping[char] = i
 	                    i += 1
+	    vocab_mapping[""] = i
 	    self.vocab_map = vocab_mapping
 
 	    #create mapping from int -> char
 	    self.int_map = [None]*len(self.vocab_map)
 	    for char, num in self.vocab_map.iteritems():
 	    	self.int_map[num] = char
+
+	def train(self):
+		#Super simple training
+		for i in xrange(len(self.seqs)):
+			print(self.get_cost(self.seqs[i], self.next_step[i]))
 
 
 
@@ -94,7 +120,11 @@ class RNN_Wrapper(object):
 	    return tmp
 
 	def seq_2_mat(self, chars, dtype=theano.config.floatX):
-	    return np.matrix(map(lambda x: self.one_hot(x, dtype=dtype), chars))
+	    return np.array([self.one_hot(x, dtype=dtype) for x in chars])
+
+	def reverse_one_hot(self, sequence):
+		return ''.join([self.int_map[np.argmax(row)] for row in sequence])
+
 
 
 
