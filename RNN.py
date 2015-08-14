@@ -43,7 +43,7 @@ class RNN(object):
 		self.loss = lambda y: -T.mean(T.nnet.categorical_crossentropy(self.prob, y))
 
 class RNN_Wrapper(object):
-	def __init__(self, data_input_file, learning_rate=0.01, L1_lambda=0.0, L2_lambda=0.0, sequence_len=50):
+	def __init__(self, data_input_file, learning_rate=0.01, L1_lambda=0.0, L2_lambda=0.0, sequence_len=50, hidden_layer_size=512):
 		#hyper-parameters
 		self.learning_rate = learning_rate
 		self.sequence_len = sequence_len
@@ -56,7 +56,7 @@ class RNN_Wrapper(object):
 		self.y = T.imatrix()
 		self.x = T.matrix()
 
-		self.RNN = RNN(vocab_size=len(self.vocab_map), x=self.x)
+		self.RNN = RNN(vocab_size=len(self.vocab_map), x=self.x, hidden_layer_size=hidden_layer_size)
 		self.predict_prob = theano.function(inputs=[self.x],
 											outputs=self.RNN.prob)
 		self.predict = theano.function(inputs=[self.x],
@@ -68,9 +68,18 @@ class RNN_Wrapper(object):
 
 		self.updates = [(param, param + self.learning_rate * gparam) for param, gparam in zip(self.RNN.params, self.gparams)]
 
-		self.get_cost = theano.function(inputs=[self.x, self.y],
+		self.index = T.lscalar('index')
+
+		self.shared_x = theano.shared(np.asarray(self.seqs))
+		self.shared_y = theano.shared(np.asarray(self.next_step, dtype=np.int32))
+
+		self.get_cost = theano.function(inputs=[self.index],
 										outputs=self.cost,
 										updates=self.updates,
+										givens={
+											self.x: self.shared_x[self.index],
+											self.y: self.shared_y[self.index]
+										},
 										allow_input_downcast=True)
 
 
@@ -114,12 +123,11 @@ class RNN_Wrapper(object):
 	    for char, num in self.vocab_map.iteritems():
 	    	self.int_map[num] = char
 
-	def train(self, breakPoint):
+	def train(self):
 		#Super simple training
 		for i in xrange(len(self.seqs)):
-			print("Cost: " + str(self.get_cost(self.seqs[i], self.next_step[i])) + "\tMinibatch: " + str(i))
-			if(i==breakPoint):
-				break
+			#print("Cost: " + str(self.get_cost(self.seqs[i], self.next_step[i])) + "\tMinibatch: " + str(i))
+			print("Cost: " + str(self.get_cost(i)) + "\tMinibatch: " + str(i))
 
 
 
