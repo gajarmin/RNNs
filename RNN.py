@@ -1,8 +1,10 @@
+import datetime
 import theano
 import theano.tensor as T
 import numpy as np
 import string
 import random
+import cPickle as pickle
 
 class RNN(object):
 	def __init__(self,vocab_size, x, hidden_layer_size=512, activation=T.tanh):
@@ -42,8 +44,95 @@ class RNN(object):
 		self.y_out = T.argmax(self.prob, axis=-1)
 		self.loss = lambda y: -T.mean(T.nnet.categorical_crossentropy(self.prob, y))
 
+class LSTM(object):
+    def __init__(self, input_size, x, hidden_layer_size, activation=T.tanh):
+        self.activation = activation
+        self.x = x
+        self.input_size = input_size
+        self.output_size = input_size
+        
+        #first hidden layer values
+        self.h0 = theano.shared(value=np.zeros(shape=(hidden_layer_size,), dtype=theano.config.floatX), name="h0", borrow=True)
+        
+        #first memory cell values
+        self.C0 = theano.shared(value=np.zeros(shape=(hidden_layer_size,), dtype=theano.config.floatX), name="C0", borrow=True)
+        
+        """
+        Weight matricies are initiated uniformly between -.08 and .08 (Karpathy 15) 
+        Bias vectors are initiated to 0
+        
+        Conventions
+        ===========
+        W_ -> weight matrix for the input 
+        U_ -> weight matrix for the previous hidden layer
+        b_ -> bias for the given gate
+        
+        
+        TODO
+        ====
+        -Concatenate all W_, U_, and b_ into one matrix/vector for efficiency
+        -Implement the ability to have depth
+        """ 
+        
+        #Values for forget gate
+        self.Wf = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, input_size)), name="Wf", borrow=True)
+        self.Uf = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, hidden_layer_size)), name="Uf", borrow=True)
+        self.bf = theano.shared(value=np.zeros(shape=(hidden_layer_size,), dtype=theano.config.floatX), name="bf", borrow=True)
+        
+        #Values for input gate
+        self.Wi = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, input_size)), name="Wi", borrow=True)
+        self.Ui = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, hidden_layer_size)), name="Ui", borrow=True)
+        self.bi = theano.shared(value=np.zeros(shape=(hidden_layer_size,), dtype=theano.config.floatX), name="bi", borrow=True)
+        
+        #Values for output gate
+        self.Wo = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size,input_size)), name="Wo", borrow=True)
+        self.Uo = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, hidden_layer_size)), name="Uo", borrow=True)
+        self.bo = theano.shared(value=np.zeros(shape=(hidden_layer_size,), dtype=theano.config.floatX), name="bo", borrow=True)
+        
+        #Values for the memory cell
+        self.Wc = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, input_size)), name="Wc", borrow=True)
+        self.Uc = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, hidden_layer_size)), name="Uc", borrow=True)
+        self.bc = theano.shared(value=np.zeros(shape=(hidden_layer_size,), dtype=theano.config.floatX), name="bc", borrow=True)
+        
+        #Overall Output Weights (used for prediction)
+        self.Wp = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, self.output_size)), name="Wp", borrow=True)
+        self.bp = theano.shared(value=np.zeros(shape=(self.output_size,), dtype=theano.config.floatX), name="bp", borrow=True)
+        
+        
+        self.params = [self.Wf, self.Uf, self.bf, self.Wi, self.Ui, self.bi,
+                      self.Wo, self.Uo, self.bo, self.Wc, self.Uc, self.bc,
+                      self.Wp, self.bp]
+        
+        def time_step(x, prev_hidden, prev_cell):
+            f_t = T.nnet.sigmoid(T.dot(self.Wf, x) + T.dot(self.Uf, prev_hidden) + self.bf)
+            i_t = T.nnet.sigmoid(T.dot(self.Wi, x) + T.dot(self.Ui, prev_hidden) + self.bi)
+            c_tild_t = T.tanh(T.dot(self.Wc, x) + T.dot(self.Uc, prev_hidden) + self.bc)
+            c_t = (i_t * c_tild_t) + (f_t * prev_cell)
+            o_t = T.nnet.sigmoid(T.dot(self.Wo, x) + T.dot(self.Uo, prev_hidden) + self.bo)
+            h_t = o_t*T.tanh(c_t)
+            y_t = T.dot(h_t, self.Wp) + self.bp
+            return [h_t, c_t, y_t]
+        
+        [self.h, self.C, self.y_pred], _ = theano.scan(time_step,
+                                      sequences=self.x,
+                                      outputs_info=[self.h0, self.C0, None])
+        
+        self.L1_norm = abs(self.Wf.sum()) + abs(self.Wi.sum()) + abs(self.Wo.sum()) + \
+                        abs(self.Wc.sum()) + abs(self.Wp.sum()) + \
+                        abs(self.Uf.sum()) + abs(self.Ui.sum()) + abs(self.Uo.sum()) + \
+                        abs(self.Uc.sum())
+        
+        self.L2_norm = (self.Wf ** 2).sum() + (self.Wi ** 2).sum() + (self.Wo ** 2).sum() + \
+                        (self.Wc ** 2).sum() + (self.Wp ** 2).sum() + \
+                        (self.Uf ** 2).sum() + (self.Ui ** 2).sum() + (self.Uo ** 2).sum() + \
+                        (self.Uc ** 2).sum()
+        
+        self.prob = T.nnet.softmax(self.y_pred)
+        self.y_out = T.argmax(self.prob, axis=-1)
+        self.loss = lambda y: -T.mean(T.nnet.categorical_crossentropy(self.prob, y))
+
 class RNN_Wrapper(object):
-	def __init__(self, data_input_file, learning_rate=0.01, L1_lambda=0.0, L2_lambda=0.0, sequence_len=50, hidden_layer_size=512):
+	def __init__(self, data_input_file, learning_rate=0.01, L1_lambda=0.0, L2_lambda=0.0, sequence_len=50, hidden_layer_size=512, flavor="LSTM"):
 		#hyper-parameters
 		self.learning_rate = learning_rate
 		self.sequence_len = sequence_len
@@ -55,8 +144,10 @@ class RNN_Wrapper(object):
 
 		self.y = T.imatrix()
 		self.x = T.matrix()
-
-		self.RNN = RNN(vocab_size=len(self.vocab_map), x=self.x, hidden_layer_size=hidden_layer_size)
+		if(flavor == "RNN"):
+			self.RNN = RNN(vocab_size=len(self.vocab_map), x=self.x, hidden_layer_size=hidden_layer_size)
+		elif(flavor == "LSTM"):
+			self.RNN = LSTM(input_size=len(self.vocab_map), x=self.x, hidden_layer_size=hidden_layer_size)
 		self.predict_prob = theano.function(inputs=[self.x],
 											outputs=self.RNN.prob)
 		self.predict = theano.function(inputs=[self.x],
@@ -122,7 +213,28 @@ class RNN_Wrapper(object):
 	    self.int_map = [None]*len(self.vocab_map)
 	    for char, num in self.vocab_map.iteritems():
 	    	self.int_map[num] = char
+	
+	'''
+	def save(self, path='./'):
+		f_name = path + datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S') + '.pkl'
 
+		f = open(f_name, 'wb')
+		state = self.__getstate()
+		pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
+		f.close()
+
+	def __getstate(self):
+		params = self.__getparams() 
+		weights = [w.get_value() for w in self.RNN.params]
+		return (params, weights)
+
+
+	
+	def __setstate(self, state):
+		params, weights = state
+		self.set_params(**params)
+		self.
+	'''
 	def train(self):
 		#Super simple training
 		for i in xrange(len(self.seqs)):
