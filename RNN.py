@@ -26,6 +26,12 @@ class RNN(object):
 
 		self.params = [self.Uf, self.Vf, self.Wf, self.Wo, self.h0, self.bh, self.bo]
 
+		self.updates = {}
+		for param in self.params:
+			init = np.zeros(param.get_value(borrow=True).shape,
+				dtype=theano.config.floatX)
+			self.updates[param] = theano.shared(init)
+
 		def time_step(char, prev_hidden):
 			h_t = self.activation(T.dot(T.dot(self.Wf, char)*(T.outer(self.Vf, self.Uf)+self.bh),prev_hidden))
 			y_t = T.dot(h_t, self.Wo) + self.bo
@@ -102,6 +108,11 @@ class LSTM(object):
         self.params = [self.Wf, self.Uf, self.bf, self.Wi, self.Ui, self.bi,
                       self.Wo, self.Uo, self.bo, self.Wc, self.Uc, self.bc,
                       self.Wp, self.bp]
+        self.updates = {}
+        for param in self.params:
+        	init = np.zeros(param.get_value(borrow=True).shape,
+        		dtype=theano.config.floatX)
+        	self.updates[param] = theano.shared(init)
         
         def time_step(x, prev_hidden, prev_cell):
             f_t = T.nnet.sigmoid(T.dot(self.Wf, x) + T.dot(self.Uf, prev_hidden) + self.bf)
@@ -129,16 +140,27 @@ class LSTM(object):
         
         self.prob = T.nnet.softmax(self.y_pred)
         self.y_out = T.argmax(self.prob, axis=-1)
-        self.loss = lambda y: -T.mean(T.nnet.categorical_crossentropy(self.prob, y))
+        self.loss = lambda y: T.mean(T.nnet.categorical_crossentropy(self.prob, y))
 
 class RNN_Wrapper(object):
-	def __init__(self, data_input_file, learning_rate=0.01, L1_lambda=0.0, L2_lambda=0.0, sequence_len=50, hidden_layer_size=512, flavor="LSTM"):
+	def __init__(self, data_input_file, learning_rate=10**-.5, L1_lambda=0.0, L2_lambda=0.0,
+	 sequence_len=50, hidden_layer_size=512, flavor="LSTM", initial_momentum=0.5, final_momentum=0.9, momentum_switchover=5,
+	 n_epochs=100):
 		#hyper-parameters
 		self.learning_rate = learning_rate
 		self.sequence_len = sequence_len
 		self.L1_lambda = L1_lambda
 		self.L2_lambda = L2_lambda
-		self.__read_data(data_input_file)		
+		self.initial_momentum = initial_momentum
+		self.final_momentum = final_momentum
+		self.momentum_switchover = momentum_switchover
+		self.n_epochs = n_epochs
+
+		self.cost_over_time = list()
+
+		self.__read_data(data_input_file)	
+
+
 
 
 
@@ -155,16 +177,27 @@ class RNN_Wrapper(object):
 
 		self.cost = self.RNN.loss(self.y) + (self.L1_lambda * self.RNN.L1_norm) + (self.L2_lambda * self.RNN.L2_norm)
 
-		self.gparams = [T.grad(self.cost, param) for param in self.RNN.params]
+		
+		self.mom = T.scalar('mom', dtype=theano.config.floatX)
 
-		self.updates = [(param, param + self.learning_rate * gparam) for param, gparam in zip(self.RNN.params, self.gparams)]
+
+		self.gparams = [T.clip(T.grad(self.cost, param),-5,5) for param in self.RNN.params]
+
+		self.updates = theano.compat.python2x.OrderedDict() #Behavior undefined with regular dict
+		for param, gparam in zip(self.RNN.params, self.gparams):
+			weight_update = self.RNN.updates[param]
+			upd = (self.mom * weight_update) - (self.learning_rate * gparam)
+			self.updates[weight_update] = upd
+			self.updates[param] = param + upd
+
+		#self.updates = [(param, param - self.learning_rate * gparam) for param, gparam in zip(self.RNN.params, self.gparams)]
 
 		self.index = T.lscalar('index')
 
 		self.shared_x = theano.shared(np.asarray(self.seqs))
 		self.shared_y = theano.shared(np.asarray(self.next_step, dtype=np.int32))
 
-		self.get_cost = theano.function(inputs=[self.index],
+		self.get_cost = theano.function(inputs=[self.index, self.mom],
 										outputs=self.cost,
 										updates=self.updates,
 										givens={
@@ -236,11 +269,20 @@ class RNN_Wrapper(object):
 		self.
 	'''
 	def train(self):
-		#Super simple training
-		for i in xrange(len(self.seqs)):
-			#print("Cost: " + str(self.get_cost(self.seqs[i], self.next_step[i])) + "\tMinibatch: " + str(i))
-			print("Cost: " + str(self.get_cost(i)) + "\tMinibatch: " + str(i))
+		epoch = 0
+		while(epoch < self.n_epochs):
 
+			for i in xrange(len(self.seqs)):
+				if(epoch > self.momentum_switchover):
+					effective_momentum = self.final_momentum
+				else:
+					effective_momentum = self.initial_momentum
+				cost = self.get_cost(i, effective_momentum)
+				self.cost_over_time.append(cost)
+				if(i%10 == 0):
+					print("Cost:\t%f\tMinibatch:\t%d\tEpoch:\t%d"%(cost,i,epoch))
+
+			epoch += 1
 
 
 	def sample(self, length=500, primeText=None):
@@ -273,6 +315,7 @@ class RNN_Wrapper(object):
 			if(rand_num > cur_sum and rand_num < num + cur_sum):
 				return (i, num)
 			cur_sum += num
+
 
 
 
