@@ -165,7 +165,7 @@ class RNN_Wrapper(object):
 
 
 		self.y = T.imatrix()
-		self.x = T.matrix()
+		self.x = T.matrix(dtype='float32')
 		if(flavor == "RNN"):
 			self.RNN = RNN(vocab_size=len(self.vocab_map), x=self.x, hidden_layer_size=hidden_layer_size)
 		elif(flavor == "LSTM"):
