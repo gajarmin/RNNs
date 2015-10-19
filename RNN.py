@@ -4,6 +4,7 @@ import theano.tensor as T
 import numpy as np
 import string
 import random
+import logging
 import cPickle as pickle
 
 class RNN(object):
@@ -145,7 +146,12 @@ class LSTM(object):
 class RNN_Wrapper(object):
 	def __init__(self, data_input_file, learning_rate=10**-.5, L1_lambda=0.0, L2_lambda=0.0,
 	 sequence_len=50, hidden_layer_size=512, flavor="LSTM", initial_momentum=0.5, final_momentum=0.9, momentum_switchover=5,
-	 n_epochs=100):
+	 n_epochs=100, logFile=None):
+		if(logFile):
+			self.logFile = open(logFile, 'w')
+		else:
+			self.logFile = None
+
 		#hyper-parameters
 		self.learning_rate = learning_rate
 		self.sequence_len = sequence_len
@@ -280,10 +286,15 @@ class RNN_Wrapper(object):
 				cost = self.get_cost(i, effective_momentum)
 				self.cost_over_time.append(cost)
 				if(i%10 == 0):
-					print("Cost:\t%f\tMinibatch:\t%d\tEpoch:\t%d"%(cost,i,epoch))
+					self.logPrint("Cost:\t%f\tMinibatch:\t%d\tEpoch:\t%d"%(cost,i,epoch))
 
 			epoch += 1
 			self.sample(primeText="To be")
+	def logPrint(self, buf):
+		if(self.logFile):
+			self.logFile.write(buf)
+		else:
+			print(buf)
 
 
 	def sample(self, length=500, primeText=None):
@@ -295,7 +306,7 @@ class RNN_Wrapper(object):
 			pred = self.predict_prob(self.seq_2_mat("".join(primeText)))
 			index = self.sample_dist(pred[-1])[0]
 			primeText.append(self.int_map[index])
-		print("".join(primeText))
+		self.logPrint("".join(primeText))
 
 
 	def one_hot(self, char, dtype=theano.config.floatX):
