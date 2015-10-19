@@ -283,6 +283,7 @@ class RNN_Wrapper(object):
 					print("Cost:\t%f\tMinibatch:\t%d\tEpoch:\t%d"%(cost,i,epoch))
 
 			epoch += 1
+			self.sample(primeText="To be")
 
 
 	def sample(self, length=500, primeText=None):
