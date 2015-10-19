@@ -81,27 +81,27 @@ class LSTM(object):
         """ 
         
         #Values for forget gate
-        self.Wf = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, input_size)), name="Wf", borrow=True)
-        self.Uf = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, hidden_layer_size)), name="Uf", borrow=True)
+        self.Wf = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, input_size)).astype(theano.config.floatX), name="Wf", borrow=True)
+        self.Uf = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, hidden_layer_size)).astype(theano.config.floatX), name="Uf", borrow=True)
         self.bf = theano.shared(value=np.zeros(shape=(hidden_layer_size,), dtype=theano.config.floatX), name="bf", borrow=True)
         
         #Values for input gate
-        self.Wi = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, input_size)), name="Wi", borrow=True)
-        self.Ui = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, hidden_layer_size)), name="Ui", borrow=True)
+        self.Wi = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, input_size)).astype(theano.config.floatX), name="Wi", borrow=True)
+        self.Ui = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, hidden_layer_size)).astype(theano.config.floatX), name="Ui", borrow=True)
         self.bi = theano.shared(value=np.zeros(shape=(hidden_layer_size,), dtype=theano.config.floatX), name="bi", borrow=True)
         
         #Values for output gate
-        self.Wo = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size,input_size)), name="Wo", borrow=True)
-        self.Uo = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, hidden_layer_size)), name="Uo", borrow=True)
+        self.Wo = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size,input_size)).astype(theano.config.floatX), name="Wo", borrow=True)
+        self.Uo = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, hidden_layer_size)).astype(theano.config.floatX), name="Uo", borrow=True)
         self.bo = theano.shared(value=np.zeros(shape=(hidden_layer_size,), dtype=theano.config.floatX), name="bo", borrow=True)
         
         #Values for the memory cell
-        self.Wc = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, input_size)), name="Wc", borrow=True)
-        self.Uc = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, hidden_layer_size)), name="Uc", borrow=True)
+        self.Wc = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, input_size)).astype(theano.config.floatX), name="Wc", borrow=True)
+        self.Uc = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, hidden_layer_size)).astype(theano.config.floatX), name="Uc", borrow=True)
         self.bc = theano.shared(value=np.zeros(shape=(hidden_layer_size,), dtype=theano.config.floatX), name="bc", borrow=True)
         
         #Overall Output Weights (used for prediction)
-        self.Wp = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, self.output_size)), name="Wp", borrow=True)
+        self.Wp = theano.shared(value=np.random.uniform(low=-0.8, high=0.8, size=(hidden_layer_size, self.output_size)).astype(theano.config.floatX), name="Wp", borrow=True)
         self.bp = theano.shared(value=np.zeros(shape=(self.output_size,), dtype=theano.config.floatX), name="bp", borrow=True)
         
         
